@@ -2,6 +2,18 @@ import math
 import numpy as np
 import torch
 import random
+import time
+
+def test_prefix_sum(arr):
+    # Check if CUDA or MPS (Metal Performance Shaders for Mac M1) is available
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")  # Fallback to CPU
+
+    return torch.cumsum(arr, dim=0)
 
 # Function to implement parallel prefix sum using PyTorch
 def parallel_prefix_sum(arr):
@@ -36,21 +48,29 @@ def parallel_prefix_sum(arr):
         current = next_arr
 
     # Move result back to CPU for easy viewing if needed
-    return current.cpu()
+    return current
 
 def intensity_cpu(taus, I_in):
+    start_time_cpu = time.time()
     tau_sum = np.cumsum(taus)
-    print(tau_sum)
+    end_time_cpu =  time.time()
+    time_cpu = end_time_cpu - start_time_cpu
+    # print(tau_sum)
     I = np.zeros_like(taus)
     I = I_in * np.exp(-tau_sum)
-    return I
+    return I, time_cpu
 
 def intensity_gpu(taus, I_in):
     taus = torch.tensor(taus)
-    tau_sum = parallel_prefix_sum(taus)
+    start_time_gpu = time.time()
+    # tau_sum = parallel_prefix_sum(taus)
+    tau_sum = test_prefix_sum(taus)
+    end_time_gpu = time.time()
+    tau_sum = tau_sum.cpu()
+    time_gpu = end_time_gpu - start_time_gpu
     I = np.zeros_like(taus)
     I = I_in * np.exp(-tau_sum)
-    return I
+    return I, time_gpu
     # print('bro')
 
 def main():
@@ -66,12 +86,14 @@ def main():
     I_inc = 340
 
     # Compute intensity for each layer
-    I_cpu = intensity_cpu(layer_taus, I_inc)
-    I_gpu = intensity_gpu(layer_taus, I_inc)
+    I_cpu, time_cpu = intensity_cpu(layer_taus, I_inc)
+    print(f"Execution time for CPU version: {time_cpu:.6f} seconds")
 
+    I_gpu, time_gpu = intensity_gpu(layer_taus, I_inc)
+    print(f"Execution time for GPU version: {time_gpu:.6f} seconds")
 
-    print('Intensity (CPU): ' + np.array2string(I_cpu))
-    print('Intensity (GPU): ' + str(I_gpu))
+    # print('Intensity (CPU): ' + np.array2string(I_cpu))
+    # print('Intensity (GPU): ' + str(I_gpu))
 
 
 if __name__ == "__main__":
