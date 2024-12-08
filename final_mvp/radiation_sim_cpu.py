@@ -3,7 +3,7 @@ from scipy.linalg import solve
 
 # Constants
 n_streams = 4  # Number of streams (4-stream approximation)
-n_levels = 10  # Number of atmospheric levels
+n_levels = 3  # Number of atmospheric levels
 omega_0 = 1.0  # Single scattering albedo
 tau_max = 1.0  # Maximum optical depth
 F0 = 1.0       # Solar irradiance
@@ -43,7 +43,7 @@ for L in range(0,n_levels):
         if (L - k) == 1:
             M = delta_tau/6
             D = (delta_tau - 1)/2
-        else:
+        if np.abs(L - k) > 1:
             M = 0
             D = 0
         for i in range(1,n_streams+1):
@@ -64,7 +64,7 @@ for L in range(0,n_levels):
                 A_xy[x,y] = b*M + delta_ij*D
 
 print(A_xy)
-print(np.count_nonzero(A_xy))
+# print(np.count_nonzero(A_xy))
 
 # Set up global vector F_x
 F_x = np.zeros((n_levels*n_streams,1))
@@ -74,6 +74,7 @@ for x in range(0,n_levels*n_streams):
     L = np.floor(x/4)
     # This formula is for isotropic scattering (P(mu_i, mu_j) = 1)
     F_x[x] = ((omega_0*F0)/(4*np.pi*mu[i-1]))*(-mu_0*((mu_0-delta_tau)*np.exp(delta_tau/mu_0) - mu_0)*np.exp(L*delta_tau/mu_0)/delta_tau + mu_0*(mu_0*np.exp(delta_tau/mu_0) - mu_0 - delta_tau)*np.exp(L*delta_tau/mu_0)/delta_tau)
-
+print(F_x)
 I_y = np.dot(np.linalg.inv(A_xy),F_x)
-
+print("I_y:")
+print(I_y)
