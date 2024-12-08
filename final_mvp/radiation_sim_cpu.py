@@ -1,9 +1,11 @@
 import numpy as np
+from bokeh.plotting import figure, show
+from bokeh.io import output_notebook
 from scipy.linalg import solve
 
 # Constants
 n_streams = 4  # Number of streams (4-stream approximation)
-n_levels = 3  # Number of atmospheric levels
+n_levels = 10  # Number of atmospheric levels
 omega_0 = 1.0  # Single scattering albedo
 tau_max = 1.0  # Maximum optical depth
 F0 = 1.0       # Solar irradiance
@@ -63,7 +65,7 @@ for L in range(0,n_levels):
                 #     print(delta_ij)
                 A_xy[x,y] = b*M + delta_ij*D
 
-print(A_xy)
+# print(A_xy)
 # print(np.count_nonzero(A_xy))
 
 # Set up global vector F_x
@@ -73,8 +75,23 @@ for x in range(0,n_levels*n_streams):
     i = x%4 + 1
     L = np.floor(x/4)
     # This formula is for isotropic scattering (P(mu_i, mu_j) = 1)
-    F_x[x] = ((omega_0*F0)/(4*np.pi*mu[i-1]))*(-mu_0*((mu_0-delta_tau)*np.exp(delta_tau/mu_0) - mu_0)*np.exp(L*delta_tau/mu_0)/delta_tau + mu_0*(mu_0*np.exp(delta_tau/mu_0) - mu_0 - delta_tau)*np.exp(L*delta_tau/mu_0)/delta_tau)
-print(F_x)
+    term1 = -(mu_0 * ((mu_0 - delta_tau) * np.exp(delta_tau / mu_0) - mu_0) * np.exp(-L * delta_tau / mu_0 - delta_tau / mu_0)) / delta_tau
+    term2 = (mu_0 * (mu_0 * np.exp(delta_tau / mu_0) - mu_0 - delta_tau) * np.exp(-L * delta_tau / mu_0)) / delta_tau
+    F_x[x] = ((omega_0*F0)/(4*np.pi*mu[i-1]))*(term1 + term2)
+    # F_x[x] = ((omega_0*F0)/(4*np.pi*mu[i-1]))*(-mu_0*((mu_0-delta_tau)*np.exp(delta_tau/mu_0) - mu_0)*np.exp(-(L+1)*delta_tau/mu_0)/delta_tau + mu_0*(mu_0*np.exp(delta_tau/mu_0) - mu_0 - delta_tau)*np.exp(-L*delta_tau/mu_0)/delta_tau)
+# print(F_x)
 I_y = np.dot(np.linalg.inv(A_xy),F_x)
-print("I_y:")
-print(I_y)
+# print("I_y_1:")
+print(I_y[2::4])
+
+vec = np.squeeze(I_y[2::4])
+print(vec)
+# Create the plot
+x_values = np.arange(len(vec))
+p = figure(title="Plot of Vector Values vs Index", x_axis_label='Index', y_axis_label='Value')
+p.line(x_values, vec, line_width=2, legend_label="Vector Data")
+p.circle(x_values, vec, size=8, legend_label="Data Points")
+
+# Show the plot
+output_notebook()  # Render in notebook if working in one
+show(p)
