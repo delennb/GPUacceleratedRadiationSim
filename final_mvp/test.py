@@ -93,13 +93,13 @@ def build_vector_F_x(n_levels, n_streams, omega_0, F0, mu_0, delta_tau, mu, devi
 def setup_radiative_transfer(n_levels):
     # Setup constants on CPU
     n_streams, omega_0, delta_tau, mu_0, F0, mu, a = setup_constants(n_levels, device='cpu')
-    
+    print("constraints setup")
     # Build matrix A_xy on CPU
     A_xy = build_matrix_A_xy(n_levels, n_streams, omega_0, delta_tau, mu, a, device='cpu')
-    
+    print("Axy built")
     # Build vector F_x on CPU
     F_x = build_vector_F_x(n_levels, n_streams, omega_0, F0, mu_0, delta_tau, mu, device='cpu')
-    
+    print("Fx built")
     return A_xy, F_x
 
 class PerformanceMetrics:
