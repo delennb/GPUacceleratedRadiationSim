@@ -125,7 +125,7 @@ class PerformanceMetrics:
 
 def benchmark_performance(n_runs=5):
     # Test different numbers of levels
-    n_levels_list = [10, 50, 100]#, 500]#, 1000]
+    n_levels_list = [10, 50, 100, 500, 1000, 2000]
     cpu_metrics = {n: PerformanceMetrics() for n in n_levels_list}
     gpu_metrics = {n: PerformanceMetrics() for n in n_levels_list}
     
