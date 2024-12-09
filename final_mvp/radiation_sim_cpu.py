@@ -1,11 +1,9 @@
 import numpy as np
-from bokeh.plotting import figure, show
-from bokeh.io import output_notebook
 from scipy.linalg import solve
 
 # Constants
 n_streams = 4  # Number of streams (4-stream approximation)
-n_levels = 10  # Number of atmospheric levels
+n_levels = 4  # Number of atmospheric levels
 omega_0 = 1.0  # Single scattering albedo
 tau_max = 1.0  # Maximum optical depth
 F0 = 1.0       # Solar irradiance
@@ -31,6 +29,9 @@ a = (a_1, a_2, a_3, a_4)
 
 # Set up global matrix A_xy
 A_xy = np.zeros((n_levels*n_streams, n_levels*n_streams))
+M_xy = np.zeros((n_levels*n_streams, n_levels*n_streams))
+D_xy = np.zeros((n_levels*n_streams, n_levels*n_streams))
+b_xy = np.zeros((n_levels*n_streams, n_levels*n_streams))
 
 for L in range(0,n_levels):
     for k in range(0,n_levels):
@@ -58,6 +59,9 @@ for L in range(0,n_levels):
                 else:
                     delta_ij = 0
                 b = (delta_ij - C_ij)/mu[i-1]
+                b_xy[x,y] = b
+                M_xy[x,y] = M
+                D_xy[x,y] = D
                 # if M != 0 and D != 0:
                 #     print(M)
                 #     print(D)
@@ -65,7 +69,12 @@ for L in range(0,n_levels):
                 #     print(delta_ij)
                 A_xy[x,y] = b*M + delta_ij*D
 
-# print(A_xy)
+print("M_xy")
+print(M_xy)
+print("\nD_xy")
+print(D_xy)
+print("\nb_xy")
+print(b_xy)
 # print(np.count_nonzero(A_xy))
 
 # Set up global vector F_x
@@ -81,17 +90,5 @@ for x in range(0,n_levels*n_streams):
     # F_x[x] = ((omega_0*F0)/(4*np.pi*mu[i-1]))*(-mu_0*((mu_0-delta_tau)*np.exp(delta_tau/mu_0) - mu_0)*np.exp(-(L+1)*delta_tau/mu_0)/delta_tau + mu_0*(mu_0*np.exp(delta_tau/mu_0) - mu_0 - delta_tau)*np.exp(-L*delta_tau/mu_0)/delta_tau)
 # print(F_x)
 I_y = np.dot(np.linalg.inv(A_xy),F_x)
-# print("I_y_1:")
+print("\nI_y_2:")
 print(I_y[2::4])
-
-vec = np.squeeze(I_y[2::4])
-print(vec)
-# Create the plot
-x_values = np.arange(len(vec))
-p = figure(title="Plot of Vector Values vs Index", x_axis_label='Index', y_axis_label='Value')
-p.line(x_values, vec, line_width=2, legend_label="Vector Data")
-p.circle(x_values, vec, size=8, legend_label="Data Points")
-
-# Show the plot
-output_notebook()  # Render in notebook if working in one
-show(p)
