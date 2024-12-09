@@ -200,7 +200,7 @@ def benchmark_performance(n_runs=5):
     
     return n_levels_list, cpu_metrics, gpu_metrics
 
-def plot_performance(n_levels_list, cpu_metrics, gpu_metrics):
+def plot_performance(n_levels_list, cpu_metrics, gpu_metrics, filename="performance_comparison.png"):
     # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
     
@@ -238,7 +238,11 @@ def plot_performance(n_levels_list, cpu_metrics, gpu_metrics):
     ax2.set_xscale('log')
     
     plt.tight_layout()
-    plt.show()
+    # Save the plot to a file
+    plt.savefig(filename)
+    print(f"Plot saved to {filename}")
+    # Close the plot to free memory
+    plt.close(fig)
 
 def save_statistics_to_csv_pandas(n_levels_list, cpu_metrics, gpu_metrics, filename="performance_statistics.csv"):
     data = []
