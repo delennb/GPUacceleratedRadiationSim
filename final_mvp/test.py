@@ -270,6 +270,6 @@ def save_statistics_to_csv_pandas(n_levels_list, cpu_metrics, gpu_metrics, filen
     print(f"Statistics saved to {filename}")
 
 if __name__ == "__main__":
-    n_levels_list, cpu_metrics, gpu_metrics = benchmark_performance(n_runs=5)
+    n_levels_list, cpu_metrics, gpu_metrics = benchmark_performance(n_runs=2)
     plot_performance(n_levels_list, cpu_metrics, gpu_metrics)
     save_statistics_to_csv_pandas(n_levels_list, cpu_metrics, gpu_metrics, filename="performance_statistics.csv")
