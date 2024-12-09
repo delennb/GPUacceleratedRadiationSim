@@ -6,7 +6,6 @@ from tqdm import tqdm
 import psutil
 import gc
 import statistics
-import csv
 import pandas as pd
 
 def get_memory_usage():
@@ -46,44 +45,6 @@ def setup_constants(n_levels, device):
 
     return n_streams, omega_0, delta_tau, mu_0, F0, mu, a
 
-def build_matrix_A_xy_gpu(n_levels, n_streams, omega_0, delta_tau, mu, a, device):
-    # Precompute M and D values
-    M = torch.zeros((n_levels, n_levels), device=device)
-    D = torch.zeros((n_levels, n_levels), device=device)
-    
-    for L in range(n_levels):
-        for k in range(n_levels):
-            if k == L:
-                M[L, k] = 2 * delta_tau / 3
-                D[L, k] = delta_tau
-            elif (k - L) == 1:
-                M[L, k] = delta_tau / 6
-                D[L, k] = (delta_tau + 1) / 2
-            elif (L - k) == 1:
-                M[L, k] = delta_tau / 6
-                D[L, k] = (delta_tau - 1) / 2
-    
-    # Expand M and D to the full matrix dimensions
-    M = M.repeat_interleave(n_streams, dim=0).repeat_interleave(n_streams, dim=1)
-    D = D.repeat_interleave(n_streams, dim=0).repeat_interleave(n_streams, dim=1)
-    
-    # Precompute other constants
-    C_ij = (omega_0 / 2) * a.view(1, -1).expand(n_streams, n_streams)  # Shape: (n_streams, n_streams)
-    delta_ij = torch.eye(n_streams, device=device)  # Shape: (n_streams, n_streams)
-    b = (delta_ij - C_ij) / mu.view(-1, 1)  # Shape: (n_streams, n_streams)
-    
-    # Initialize A_xy
-    A_xy = torch.zeros((n_levels * n_streams, n_levels * n_streams), device=device)
-    
-    # Fill A_xy using broadcasting and block computation
-    for L in range(n_levels):
-        for k in range(n_levels):
-            if M[L, k] != 0 or D[L, k] != 0:  # Only compute non-zero blocks
-                block = b * M[L, k] + delta_ij * D[L, k]  # Shape: (n_streams, n_streams)
-                A_xy[L * n_streams:(L + 1) * n_streams, k * n_streams:(k + 1) * n_streams] = block
-    
-    return A_xy
-
 def build_matrix_A_xy(n_levels, n_streams, omega_0, delta_tau, mu, a, device):
     A_xy = torch.zeros((n_levels*n_streams, n_levels*n_streams), device=device)
     
@@ -116,8 +77,6 @@ def build_matrix_A_xy(n_levels, n_streams, omega_0, delta_tau, mu, a, device):
 def build_vector_F_x(n_levels, n_streams, omega_0, F0, mu_0, delta_tau, mu, device):
     F_x = torch.zeros((n_levels*n_streams, 1), device=device)
     
-    L_tensor = torch.arange(n_levels, device=device).reshape(-1, 1)
-    
     for x in range(n_levels*n_streams):
         i = x % 4
         L = x // 4
@@ -131,20 +90,17 @@ def build_vector_F_x(n_levels, n_streams, omega_0, F0, mu_0, delta_tau, mu, devi
     
     return F_x
 
-def solve_radiative_transfer(n_levels, device='cpu'):
-    # Setup constants
-    n_streams, omega_0, delta_tau, mu_0, F0, mu, a = setup_constants(n_levels, device)
+def setup_radiative_transfer(n_levels):
+    # Setup constants on CPU
+    n_streams, omega_0, delta_tau, mu_0, F0, mu, a = setup_constants(n_levels, device='cpu')
     
-    # Build matrix A_xy
-    A_xy = build_matrix_A_xy(n_levels, n_streams, omega_0, delta_tau, mu, a, device)
+    # Build matrix A_xy on CPU
+    A_xy = build_matrix_A_xy(n_levels, n_streams, omega_0, delta_tau, mu, a, device='cpu')
     
-    # Build vector F_x
-    F_x = build_vector_F_x(n_levels, n_streams, omega_0, F0, mu_0, delta_tau, mu, device)
+    # Build vector F_x on CPU
+    F_x = build_vector_F_x(n_levels, n_streams, omega_0, F0, mu_0, delta_tau, mu, device='cpu')
     
-    # Solve the system
-    I_y = torch.linalg.solve(A_xy, F_x)
-    
-    return I_y[2::4]  # Return the same slice as in the original code
+    return A_xy, F_x
 
 class PerformanceMetrics:
     def __init__(self):
@@ -169,7 +125,7 @@ class PerformanceMetrics:
 
 def benchmark_performance(n_runs=5):
     # Test different numbers of levels
-    n_levels_list = [10, 50, 100, 500, 1000]#, 2000, 5000]
+    n_levels_list = [10, 50, 100, 500]#, 1000]
     cpu_metrics = {n: PerformanceMetrics() for n in n_levels_list}
     gpu_metrics = {n: PerformanceMetrics() for n in n_levels_list}
     
@@ -181,19 +137,22 @@ def benchmark_performance(n_runs=5):
     print("\nRunning CPU benchmarks...")
     for n_levels in n_levels_list:
         print(f"\nProcessing {n_levels} levels:")
+        # Setup A_xy and F_x on CPU
+        A_xy_cpu, F_x_cpu = setup_radiative_transfer(n_levels)
         for run in tqdm(range(n_runs)):
             # Clear memory before each run
             gc.collect()
             torch.cuda.empty_cache() if device.type == 'cuda' else None
             
             start_time = time.time()
-            _ = solve_radiative_transfer(n_levels, device='cpu')
+            # Solve the system on CPU
+            I_y = torch.linalg.solve(A_xy_cpu, F_x_cpu)
             cpu_time = time.time() - start_time
             
             cpu_mem, _ = get_memory_usage()
             cpu_metrics[n_levels].add_time(cpu_time)
             cpu_metrics[n_levels].update_memory(cpu_mem, 0)
-            
+                
         print(f"Average CPU time: {cpu_metrics[n_levels].avg_time:.4f} ± {cpu_metrics[n_levels].std_time:.4f} seconds")
         print(f"Peak CPU memory: {cpu_metrics[n_levels].peak_cpu_memory:.2f} GB")
     
@@ -202,6 +161,11 @@ def benchmark_performance(n_runs=5):
         print("\nRunning GPU benchmarks...")
         for n_levels in n_levels_list:
             print(f"\nProcessing {n_levels} levels:")
+            # Setup A_xy and F_x on CPU
+            A_xy_cpu, F_x_cpu = setup_radiative_transfer(n_levels)
+            # Move A_xy and F_x to GPU
+            A_xy_gpu = A_xy_cpu.to(device)
+            F_x_gpu = F_x_cpu.to(device)
             for run in tqdm(range(n_runs)):
                 # Clear memory before each run
                 gc.collect()
@@ -211,24 +175,28 @@ def benchmark_performance(n_runs=5):
                     torch.cuda.synchronize()
                 elif device.type == 'mps':
                     torch.mps.synchronize()
-                
+                    
                 start_time = time.time()
-                _ = solve_radiative_transfer(n_levels, device=device)
+                # Solve the system on GPU
+                I_y = torch.linalg.solve(A_xy_gpu, F_x_gpu)
                 
                 if device.type == 'cuda':
                     torch.cuda.synchronize()
                 elif device.type == 'mps':
                     torch.mps.synchronize()
-                    
+                        
                 gpu_time = time.time() - start_time
-                
+                    
                 cpu_mem, gpu_mem = get_memory_usage()
                 gpu_metrics[n_levels].add_time(gpu_time)
                 gpu_metrics[n_levels].update_memory(cpu_mem, gpu_mem)
-            
+                
             print(f"Average GPU time: {gpu_metrics[n_levels].avg_time:.4f} ± {gpu_metrics[n_levels].std_time:.4f} seconds")
             print(f"Peak GPU memory: {gpu_metrics[n_levels].peak_gpu_memory:.2f} GB")
-            print(f"Speedup: {cpu_metrics[n_levels].avg_time/gpu_metrics[n_levels].avg_time:.2f}x")
+            if gpu_metrics[n_levels].avg_time > 0:
+                print(f"Speedup: {cpu_metrics[n_levels].avg_time/gpu_metrics[n_levels].avg_time:.2f}x")
+            else:
+                print("Speedup: N/A")
     
     return n_levels_list, cpu_metrics, gpu_metrics
 
@@ -241,9 +209,9 @@ def plot_performance(n_levels_list, cpu_metrics, gpu_metrics):
     cpu_errors = [metrics.std_time for metrics in cpu_metrics.values()]
     ax1.errorbar(n_levels_list, cpu_times, yerr=cpu_errors, fmt='b-o', label='CPU')
     
-    if any(gpu_metrics.values()):
-        gpu_times = [metrics.avg_time for metrics in gpu_metrics.values()]
-        gpu_errors = [metrics.std_time for metrics in gpu_metrics.values()]
+    if any([metrics.times for metrics in gpu_metrics.values()]):
+        gpu_times = [metrics.avg_time if metrics.times else None for metrics in gpu_metrics.values()]
+        gpu_errors = [metrics.std_time if metrics.times else None for metrics in gpu_metrics.values()]
         ax1.errorbar(n_levels_list, gpu_times, yerr=gpu_errors, fmt='r-o', label='GPU')
     
     ax1.set_xlabel('Number of Levels')
@@ -258,8 +226,8 @@ def plot_performance(n_levels_list, cpu_metrics, gpu_metrics):
     cpu_memory = [metrics.peak_cpu_memory for metrics in cpu_metrics.values()]
     ax2.plot(n_levels_list, cpu_memory, 'b-o', label='CPU Memory')
     
-    if any(gpu_metrics.values()):
-        gpu_memory = [metrics.peak_gpu_memory for metrics in gpu_metrics.values()]
+    if any([metrics.peak_gpu_memory for metrics in gpu_metrics.values()]):
+        gpu_memory = [metrics.peak_gpu_memory if metrics.peak_gpu_memory else None for metrics in gpu_metrics.values()]
         ax2.plot(n_levels_list, gpu_memory, 'r-o', label='GPU Memory')
     
     ax2.set_xlabel('Number of Levels')
