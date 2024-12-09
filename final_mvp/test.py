@@ -200,34 +200,44 @@ def benchmark_performance(n_runs=5):
     
     return n_levels_list, cpu_metrics, gpu_metrics
 
-def plot_performance(n_levels_list, cpu_metrics, gpu_metrics, filename="performance_comparison.png"):
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+def plot_performance(n_levels_list, cpu_metrics, gpu_metrics, speedup_filename="speedup_comparison.png", memory_filename="memory_usage_comparison.png"):
+    # --- Speedup Plot ---
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
     
-    # Time performance plot
-    cpu_times = [metrics.avg_time for metrics in cpu_metrics.values()]
-    cpu_errors = [metrics.std_time for metrics in cpu_metrics.values()]
-    ax1.errorbar(n_levels_list, cpu_times, yerr=cpu_errors, fmt='b-o', label='CPU')
+    # Calculate speedup
+    speedup = []
+    for n in n_levels_list:
+        if gpu_metrics[n].avg_time > 0:  # Avoid division by zero
+            speedup.append(cpu_metrics[n].avg_time / gpu_metrics[n].avg_time)
+        else:
+            speedup.append(None)  # Set None for invalid cases
     
-    if any([metrics.times for metrics in gpu_metrics.values()]):
-        gpu_times = [metrics.avg_time if metrics.times else None for metrics in gpu_metrics.values()]
-        gpu_errors = [metrics.std_time if metrics.times else None for metrics in gpu_metrics.values()]
-        ax1.errorbar(n_levels_list, gpu_times, yerr=gpu_errors, fmt='r-o', label='GPU')
+    # Plot speedup
+    ax1.plot(n_levels_list, speedup, 'g-o', label='Speedup (CPU Time / GPU Time)')
     
     ax1.set_xlabel('Number of Levels')
-    ax1.set_ylabel('Time (seconds)')
-    ax1.set_title('Performance Comparison: CPU vs GPU')
+    ax1.set_ylabel('Speedup')
+    ax1.set_title('Speedup: CPU vs GPU')
     ax1.grid(True)
     ax1.legend()
     ax1.set_xscale('log')
     ax1.set_yscale('log')
+
+    # Save the speedup plot
+    plt.tight_layout()
+    plt.savefig(speedup_filename)
+    print(f"Speedup plot saved to {speedup_filename}")
+    plt.close(fig1)
+
+    # --- Memory Usage Plot ---
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
     
-    # Memory usage plot
+    # Memory usage
     cpu_memory = [metrics.peak_cpu_memory for metrics in cpu_metrics.values()]
+    gpu_memory = [metrics.peak_gpu_memory if metrics.peak_gpu_memory > 0 else None for metrics in gpu_metrics.values()]
+
     ax2.plot(n_levels_list, cpu_memory, 'b-o', label='CPU Memory')
-    
-    if any([metrics.peak_gpu_memory for metrics in gpu_metrics.values()]):
-        gpu_memory = [metrics.peak_gpu_memory if metrics.peak_gpu_memory else None for metrics in gpu_metrics.values()]
+    if any(gpu_memory):
         ax2.plot(n_levels_list, gpu_memory, 'r-o', label='GPU Memory')
     
     ax2.set_xlabel('Number of Levels')
@@ -236,13 +246,12 @@ def plot_performance(n_levels_list, cpu_metrics, gpu_metrics, filename="performa
     ax2.grid(True)
     ax2.legend()
     ax2.set_xscale('log')
-    
+
+    # Save the memory usage plot
     plt.tight_layout()
-    # Save the plot to a file
-    plt.savefig(filename)
-    print(f"Plot saved to {filename}")
-    # Close the plot to free memory
-    plt.close(fig)
+    plt.savefig(memory_filename)
+    print(f"Memory usage plot saved to {memory_filename}")
+    plt.close(fig2)
 
 def save_statistics_to_csv_pandas(n_levels_list, cpu_metrics, gpu_metrics, filename="performance_statistics.csv"):
     data = []
